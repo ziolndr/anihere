@@ -1411,11 +1411,53 @@ body,
   display:inline-block;
 }
 
+
+/* CORPUS COUNT CLARITY */
+.depth{
+  align-items:center!important;
+}
+.depth-lbl{
+  display:flex!important;
+  align-items:center!important;
+  gap:8px!important;
+  flex-wrap:wrap!important;
+}
+.depth-lbl b{
+  font-family:var(--mono)!important;
+  font-size:10px!important;
+  line-height:1!important;
+  letter-spacing:.08em!important;
+  text-transform:uppercase!important;
+  color:var(--ink)!important;
+  font-weight:600!important;
+  padding:5px 7px!important;
+  border:1px solid var(--line)!important;
+  background:rgba(255,255,255,.42)!important;
+}
+.depth-lbl b[data-state="loading"]{
+  color:var(--ink-mid)!important;
+}
+.depth-lbl b[data-state="ready"]{
+  color:var(--ink)!important;
+}
+.depth-lbl b[data-state="error"]{
+  color:#ff2f5f!important;
+  border-color:rgba(255,47,95,.35)!important;
+}
+.depth button small{
+  opacity:.56!important;
+  margin-left:4px!important;
+  font-size:.82em!important;
+}
+body[data-theme="dark"] .depth-lbl b{
+  background:rgba(5,5,5,.24)!important;
+}
+
 </style>
 </head>
 <body class="loading">
 <main class="app">
-<section class="left"><button class="theme-orb" type="button" data-theme-switch aria-label="Toggle theme" aria-pressed="false"><span></span></button><div><div class="brand"><span>ANI</span><span>HERE</span></div><div class="kicker">anime character resonance</div><p class="subcopy">Type who you are, what you are dealing with, or who you wish could answer back. ARBITER ranks anime characters by emotional structure, not quiz answers or exact keyword overlap.</p><form id="matchForm" class="form"><div class="label">your words</div><textarea id="query" spellcheck="true">I feel like the side character who keeps everyone together but never gets a real arc. I joke around, give advice, and act fine, but I am tired of being useful instead of understood. Which anime character matches that?</textarea><div class="controls"><button class="primary" type="submit"><span class="spin"></span><span class="lbl">find my character →</span></button></div><div class="depth" id="depth"><span class="depth-lbl">corpus</span><button type="button" data-size="80" class="on">shallow</button><button type="button" data-size="180">field</button><button type="button" data-size="400">archive</button></div><div class="examples" id="examples"><span class="examples-lbl">presets</span><div class="example-rail" id="presetGrid" aria-label="self-description examples"></div></div><div class="engine" aria-live="polite"><div class="engine-copy" id="status"></div></div></form></div><div class="lower"><div>© 2026 Actual General Intelligence, Inc.<br>ARBITER coherence engine</div><div style="display:flex;align-items:center;gap:14px"><button id="clearBtn" type="button">new match</button></div></div></section>
+<section class="left"><button class="theme-orb" type="button" data-theme-switch aria-label="Toggle theme" aria-pressed="false"><span></span></button><div><div class="brand"><span>ANI</span><span>HERE</span></div><div class="kicker">anime character resonance</div><p class="subcopy">Type who you are, what you are dealing with, or who you wish could answer back. ARBITER ranks anime characters by emotional structure, not quiz answers or exact keyword overlap.</p><form id="matchForm" class="form"><div class="label">your words</div><textarea id="query" spellcheck="true">I feel like the side character who keeps everyone together but never gets a real arc. I joke around, give advice, and act fine, but I am tired of being useful instead of understood. Which anime character matches that?</textarea><div class="controls"><button class="primary" type="submit"><span class="spin"></span><span class="lbl">find my character →</span></button></div><div class="depth" id="depth"><span class="depth-lbl">corpus <b id="corpusCount">shallow · 80 characters</b></span><button type="button" data-size="80" class="on">shallow <small>80</small></button><button type="button" data-size="180">field <small>180</small></button><button type="button" data-size="420">archive <small>420</small></button></div><div class="examples" id="examples"><span class="examples-lbl">presets</span><div class="example-rail" id="presetGrid" aria-label="self-description examples"></div></div><div class="engine" aria-live="polite"><div class="engine-copy" id="status"></div></div></form></div><div class="lower"><div>© 2026 Actual General Intelligence, Inc.<br>ARBITER coherence engine</div><div style="display:flex;align-items:center;gap:14px"><button id="clearBtn" type="button">new match</button></div></div></section>
 <section class="right"><div id="wall" class="wall" data-live="false"></div><div id="results" class="results"><div class="result-head">
   <div class="result-brand"><span>ANI</span><span>HERE</span></div>
   <form id="resultSearchForm" class="result-search">
@@ -1465,6 +1507,27 @@ const $=s=>document.querySelector(s), wall=$('#wall'), statusEl=$('#status'), qu
 function cleanHtml(s){return String(s||'').replace(/<br\s*\/?>/gi,' ').replace(/<\/?[^>]+>/g,' ').replace(/\s+/g,' ').trim()}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function setStatus(t){if(statusEl){statusEl.textContent='';statusEl.dataset.state='silent'}console.debug&&console.debug('ANIHERE status:',t)}
+
+function corpusModeName(total){
+  total=Number(total||CORPUS_SIZE||80);
+  if(total<=80)return 'shallow';
+  if(total<=180)return 'field';
+  return 'archive';
+}
+function setCorpusMeta(state,count,total){
+  const el=document.getElementById('corpusCount');
+  if(!el)return;
+  total=Number(total||CORPUS_SIZE||80);
+  count=Number(count||0);
+  const mode=corpusModeName(total);
+  let text=mode+' · '+total+' characters';
+  if(state==='loading')text=mode+' · loading '+count+'/'+total;
+  if(state==='ready')text=mode+' · '+count+' loaded';
+  if(state==='error')text=mode+' · load failed';
+  el.textContent=text;
+  el.dataset.state=state||'idle';
+}
+
 function mediaTitle(m){return (m&&m.title&&(m.title.english||m.title.romaji||m.title.native))||''}
 function firstSeries(c){return (c.series&&c.series[0])||'Anime'}
 function clampText(s,n){s=String(s||'').replace(/\s+/g,' ').trim();return s.length>n?s.slice(0,n-1)+'…':s}
@@ -1488,9 +1551,73 @@ function candidateText(c){return clampWords(cleanHtml(c.description),85);}
 
 async function anilistFetch(query,variables){const r=await fetch(ANILIST_URL,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({query,variables})});if(!r.ok)throw new Error('anilist '+r.status);const j=await r.json();if(j.errors&&j.errors.length)throw new Error(j.errors.map(e=>e.message).join('; '));return j.data}
 const CHARACTER_QUERY='query($page:Int,$perPage:Int,$sort:[CharacterSort]){Page(page:$page,perPage:$perPage){characters(sort:$sort){id name{full native} image{large medium} description(asHtml:false) gender media(type:ANIME,sort:POPULARITY_DESC,perPage:4){nodes{title{romaji english native}}}}}}';
-async function loadAniListCharacters(limit){const pageSize=50,pages=Math.ceil(limit/pageSize),out=[];for(let page=1;page<=pages;page++){setStatus('loading character wall '+out.length+'/'+limit);const data=await anilistFetch(CHARACTER_QUERY,{page,perPage:pageSize,sort:['FAVOURITES_DESC']});const chars=(data&&data.Page&&data.Page.characters)||[];for(const ch of chars){const name=(ch.name&&(ch.name.full||ch.name.native))||'';const image=(ch.image&&(ch.image.large||ch.image.medium))||'';const description=cleanHtml(ch.description||'');const series=((ch.media&&ch.media.nodes)||[]).map(n=>mediaTitle(n)).filter(Boolean);const wc=description.split(/\s+/).filter(Boolean).length;if(!name||!image||!description||!series.length||wc<40)continue;const rec={id:'anilist-'+ch.id,name,image,description,gender:ch.gender||'',series,traits:[]};rec.traits=inferTraits(rec);out.push(rec);if(out.length>=limit)break}if(out.length>=limit)break}return uniqueBy(out,c=>c.id).slice(0,limit)}
+async function loadAniListCharacters(limit){
+  const pageSize=50,pages=Math.ceil(limit/pageSize),out=[];
+  setCorpusMeta('loading',0,limit);
+  for(let page=1;page<=pages;page++){
+    setCorpusMeta('loading',out.length,limit);
+    setStatus('loading character wall '+out.length+'/'+limit);
+    const data=await anilistFetch(CHARACTER_QUERY,{page,perPage:pageSize,sort:['FAVOURITES_DESC']});
+    const chars=(data&&data.Page&&data.Page.characters)||[];
+    for(const ch of chars){
+      const name=(ch.name&&(ch.name.full||ch.name.native))||'';
+      const image=(ch.image&&(ch.image.large||ch.image.medium))||'';
+      const description=cleanHtml(ch.description||'');
+      const series=((ch.media&&ch.media.nodes)||[]).map(n=>mediaTitle(n)).filter(Boolean);
+      const wc=description.split(/\s+/).filter(Boolean).length;
+      if(!name||!image||!description||!series.length||wc<40)continue;
+      const rec={id:'anilist-'+ch.id,name,image,description,gender:ch.gender||'',series,traits:[]};
+      rec.traits=inferTraits(rec);
+      out.push(rec);
+      if(out.length>=limit)break;
+    }
+    setCorpusMeta('loading',Math.min(out.length,limit),limit);
+    if(out.length>=limit)break;
+  }
+  return uniqueBy(out,c=>c.id).slice(0,limit);
+}
 function renderWall(records){const tiles=shuffledCopy((records||[]).filter(c=>c&&c.image&&c.name)).slice(0,180);if(!tiles.length){wall.dataset.live='false';return}wall.dataset.live='true';wall.innerHTML=tiles.map(c=>'<article class="tile"><img src="'+esc(c.image)+'" alt="'+esc(c.name)+'" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.closest(\'.tile\')&&this.closest(\'.tile\').remove()"><div class="tile-caption"><div class="tile-name">'+esc(c.name)+'</div><div class="tile-source">'+esc(firstSeries(c))+'</div></div></article>').join('')}
-async function loadCorpus(force){const cacheKey='anihere:corpus:v3:'+CORPUS_SIZE;document.body.classList.add('loading');setBtnLabel('loading characters…');document.body.classList.remove('has-results');try{if(!force){try{const cached=localStorage.getItem(cacheKey);if(cached){const p=JSON.parse(cached);if(p&&Array.isArray(p.records)&&p.records.length){corpus=p.records;setStatus(corpus.length+' anime characters loaded');renderWall(corpus);document.body.classList.remove('loading');return corpus}}}catch(e){}}corpus=await loadAniListCharacters(CORPUS_SIZE);if(!corpus.length)throw new Error('empty AniList character corpus');try{localStorage.setItem(cacheKey,JSON.stringify({ts:Date.now(),records:corpus}))}catch(e){}setStatus(corpus.length+' anime characters loaded');renderWall(corpus);return corpus}catch(err){console.error(err);setStatus('anime corpus failed');wall.dataset.live='false';throw err}finally{document.body.classList.remove('loading');if(!document.body.classList.contains('searching'))setBtnLabel('find my character →')}}
+async function loadCorpus(force){
+  const cacheKey='anihere:corpus:v3:'+CORPUS_SIZE;
+  document.body.classList.add('loading');
+  setBtnLabel('loading characters…');
+  setCorpusMeta('loading',0,CORPUS_SIZE);
+  document.body.classList.remove('has-results');
+  try{
+    if(!force){
+      try{
+        const cached=localStorage.getItem(cacheKey);
+        if(cached){
+          const p=JSON.parse(cached);
+          if(p&&Array.isArray(p.records)&&p.records.length){
+            corpus=p.records.slice(0,CORPUS_SIZE);
+            setStatus(corpus.length+' anime characters loaded');
+            setCorpusMeta('ready',corpus.length,CORPUS_SIZE);
+            renderWall(corpus);
+            document.body.classList.remove('loading');
+            return corpus;
+          }
+        }
+      }catch(e){}
+    }
+    corpus=await loadAniListCharacters(CORPUS_SIZE);
+    if(!corpus.length)throw new Error('empty AniList character corpus');
+    try{localStorage.setItem(cacheKey,JSON.stringify({ts:Date.now(),records:corpus}))}catch(e){}
+    setStatus(corpus.length+' anime characters loaded');
+    setCorpusMeta('ready',corpus.length,CORPUS_SIZE);
+    renderWall(corpus);
+    return corpus;
+  }catch(err){
+    console.error(err);
+    setStatus('anime corpus failed');
+    setCorpusMeta('error',corpus.length||0,CORPUS_SIZE);
+    wall.dataset.live='false';
+    throw err;
+  }finally{
+    document.body.classList.remove('loading');
+    if(!document.body.classList.contains('searching'))setBtnLabel('find my character →');
+  }
+}
 
 async function arbiterCompare(query,candidateTexts,topk){const r=await fetch(ARBITER_BASE.replace(/\/$/,'')+'/public/compare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,candidates:candidateTexts,use_freq:true,top_k:topk||candidateTexts.length})});if(!r.ok)throw new Error('compare '+r.status);return r.json()}
 function rowsOf(d){return (d&&(d.all||d.top))||[]}
@@ -1714,11 +1841,27 @@ const resultBackBtn=$('#resultBackBtn');if(resultBackBtn)resultBackBtn.addEventL
   buttons.forEach(b=>b.addEventListener('click',()=>applyTheme(document.body.dataset.theme==='dark'?'light':'dark')));
 })();
 
-document.getElementById('depth').addEventListener('click',e=>{const b=e.target.closest('button[data-size]');if(!b)return;CORPUS_SIZE=Number(b.dataset.size);document.querySelectorAll('#depth button').forEach(x=>x.classList.toggle('on',x===b));wall.dataset.live='false';renderPresetPrompts();
-loadCorpus(false).catch(err=>{console.warn('initial corpus load failed',err);document.body.classList.remove('loading');setStatus('character feed blocked — try shallow or reload');});});
+document.getElementById('depth').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-size]');
+  if(!b)return;
+  CORPUS_SIZE=Number(b.dataset.size);
+  document.querySelectorAll('#depth button').forEach(x=>x.classList.toggle('on',x===b));
+  setCorpusMeta('loading',0,CORPUS_SIZE);
+  wall.dataset.live='false';
+  candidateToRecord=new Map();
+  whyResultCache.clear();
+  renderPresetPrompts();
+  loadCorpus(false).catch(err=>{
+    console.warn('initial corpus load failed',err);
+    document.body.classList.remove('loading');
+    setCorpusMeta('error',0,CORPUS_SIZE);
+    setStatus('character feed blocked — try shallow or reload');
+  });
+});
 
 renderPresetPrompts();
-loadCorpus(false).catch(err=>{console.warn('initial corpus load failed',err);document.body.classList.remove('loading');setStatus('character feed blocked — try shallow or reload');});
+setCorpusMeta('idle',0,CORPUS_SIZE);
+loadCorpus(false).catch(err=>{console.warn('initial corpus load failed',err);document.body.classList.remove('loading');setCorpusMeta('error',0,CORPUS_SIZE);setStatus('character feed blocked — try shallow or reload');});
 </script>
 </body>
 </html>
