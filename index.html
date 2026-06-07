@@ -1453,6 +1453,13 @@ body[data-theme="dark"] .depth-lbl b{
   background:rgba(5,5,5,.24)!important;
 }
 
+
+/* MATCH PROGRESS LIVES IN THE BUTTON */
+body.searching .primary .lbl,
+body.searching #resultSearchForm button{
+  font-variant-numeric:tabular-nums!important;
+}
+
 </style>
 </head>
 <body class="loading">
@@ -1788,6 +1795,66 @@ function startBtnCycle(){
   setBtnLabel(states[i]);
   _btnTimer=setInterval(()=>{i=(i+1)%states.length;setBtnLabel(states[i])},900);
 }
+
+function setMatchProgress(source,phase,done,total){
+  total=Number(total||corpus.length||CORPUS_SIZE||0);
+  done=Math.max(0,Math.min(Number(done||0),total));
+  const label=phase==='finalizing'
+    ? 'finalizing…'
+    : phase==='revealing'
+      ? 'revealing…'
+      : total>0
+        ? 'matching '+done+'/'+total
+        : 'matching…';
+  if(source==='results')setResultSearchLabel(label);
+  else setBtnLabel(label);
+}
+function rowText(row){
+  return typeof row==='string'?row:(row&&(row.text||row.candidate||row.value||row.input||row.item||row.label))||'';
+}
+function mergePartialResults(batchResults,limit){
+  const best=new Map();
+  batchResults.forEach(data=>{
+    rowsOf(data).forEach(row=>{
+      const text=rowText(row);
+      if(!text)return;
+      const score=scoreOf(row);
+      const prev=best.get(text);
+      if(!prev||score>prev.score)best.set(text,{text,score});
+    });
+  });
+  return [...best.values()].sort((a,b)=>b.score-a.score).slice(0,limit).map(x=>x.text);
+}
+async function compareCorpusWithProgress(query,candidates,topk,source){
+  const total=candidates.length;
+  setMatchProgress(source,'matching',0,total);
+
+  // Small corpuses can stay one request; large corpuses are chunked so the UI can show real completion.
+  if(total<=100){
+    const data=await arbiterCompare(query,candidates,topk);
+    setMatchProgress(source,'revealing',total,total);
+    return data;
+  }
+
+  const chunkSize=90;
+  const chunks=[];
+  for(let i=0;i<candidates.length;i+=chunkSize)chunks.push(candidates.slice(i,i+chunkSize));
+
+  let completed=0;
+  const batchResults=await Promise.all(chunks.map(async chunk=>{
+    const data=await arbiterCompare(query,chunk,Math.min(28,chunk.length));
+    completed+=chunk.length;
+    setMatchProgress(source,'matching',Math.min(completed,total),total);
+    return data;
+  }));
+
+  const finalists=mergePartialResults(batchResults,Math.min(140,total));
+  setMatchProgress(source,'finalizing',total,total);
+  const finalData=await arbiterCompare(query,finalists.length?finalists:candidates,topk);
+  setMatchProgress(source,'revealing',total,total);
+  return finalData;
+}
+
 async function runMatch(queryOverride, source){
   const q=String(queryOverride!=null?queryOverride:queryEl.value).trim();
   if(queryOverride!=null)queryEl.value=q;
@@ -1796,11 +1863,11 @@ async function runMatch(queryOverride, source){
   if(whyResultCache.size>200)whyResultCache.clear();
   if(userAxisCache.size>40)userAxisCache.clear();
   if(!corpus.length){try{await loadCorpus(false)}catch(e){return}}
-  document.body.classList.add('searching');if(source==='results'){startResultBtnCycle()}else{startBtnCycle()}$('#whyBlock').style.display='none';
+  document.body.classList.add('searching');setMatchProgress(source,'matching',0,corpus.length);$('#whyBlock').style.display='none';
   try{
     candidateToRecord=new Map();
     const candidates=corpus.map(c=>{const t=candidateText(c);candidateToRecord.set(t,c);return t});
-    const data=await arbiterCompare(q,candidates,RETURN_COUNT);
+    const data=await compareCorpusWithProgress(q,candidates,RETURN_COUNT,source);
     const matches=mapResults(data);
     if(!matches.length)throw new Error('no results mapped');
     clearInterval(_stageTimer);
