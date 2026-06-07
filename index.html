@@ -1405,6 +1405,12 @@ body,
   letter-spacing:-.012em!important;
 }
 
+
+/* FAST WHY CACHE PLACEHOLDER */
+.why-label span{
+  display:inline-block;
+}
+
 </style>
 </head>
 <body class="loading">
@@ -1451,6 +1457,10 @@ const AXES=[
 ];
 
 let corpus=[],candidateToRecord=new Map(),lastQuery='',matches=[],activeMatchIndex=0;
+const axisTexts=AXES.map(a=>a.text);
+const userAxisCache=new Map();
+const charAxisCache=new Map();
+const whyResultCache=new Map();
 const $=s=>document.querySelector(s), wall=$('#wall'), statusEl=$('#status'), queryEl=$('#query');
 function cleanHtml(s){return String(s||'').replace(/<br\s*\/?>/gi,' ').replace(/<\/?[^>]+>/g,' ').replace(/\s+/g,' ').trim()}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -1489,30 +1499,58 @@ function mapResults(data){const rows=rowsOf(data);return rows.slice(0,RETURN_COU
 
 function axisMap(d){const rows=rowsOf(d);const m=new Map();rows.forEach(r=>{const t=typeof r==='string'?r:(r.text||'');m.set(t,scoreOf(r))});return m}
 function normWithin(m){const vals=[...m.values()];if(!vals.length)return m;const mn=Math.min.apply(null,vals),mx=Math.max.apply(null,vals);const span=(mx-mn)||1;const out=new Map();for(const [k,v] of m)out.set(k,(v-mn)/span);return out}
-async function emotionalWhy(userQuery,charText){
+function whyRecordKey(rec){
+  if(!rec)return '';
+  return String(rec.id||rec.siteUrl||rec.name+'|'+firstSeries(rec));
+}
+function normalizedQueryKey(q){
+  return String(q||'').trim().replace(/\s+/g,' ').toLowerCase();
+}
+function withCache(cache,key,loader){
+  if(cache.has(key))return cache.get(key);
+  const p=Promise.resolve().then(loader).catch(err=>{cache.delete(key);throw err});
+  cache.set(key,p);
+  return p;
+}
+function getUserAxisScores(userQuery){
+  const key=normalizedQueryKey(userQuery);
+  return withCache(userAxisCache,key,async()=>axisMap(await arbiterCompare(userQuery,axisTexts,axisTexts.length)));
+}
+function getCharacterAxisScores(rec){
+  const key=whyRecordKey(rec);
+  return withCache(charAxisCache,key,async()=>axisMap(await arbiterCompare(candidateText(rec),axisTexts,axisTexts.length)));
+}
+async function emotionalWhyForRecord(userQuery,rec){
   try{
-    const axisTexts=AXES.map(a=>a.text);
-    const [u,c]=await Promise.all([
-      arbiterCompare(userQuery,axisTexts,axisTexts.length),
-      arbiterCompare(charText,axisTexts,axisTexts.length)
-    ]);
-    const userScores=axisMap(u);
-    const charScores=axisMap(c);
+    const key=normalizedQueryKey(userQuery)+'::'+whyRecordKey(rec);
+    return await withCache(whyResultCache,key,async()=>{
+      const [userScores,charScores]=await Promise.all([
+        getUserAxisScores(userQuery),
+        getCharacterAxisScores(rec)
+      ]);
 
-    const ranked=AXES.map(a=>{
-      const you=Number(userScores.get(a.text)||0);
-      const them=Number(charScores.get(a.text)||0);
-      return {axis:a,you,them,shared:Math.min(you,them)};
-    })
-    .filter(r=>r.you>0&&r.them>0)
-    .sort((a,b)=>b.shared-a.shared)
-    .slice(0,4);
+      const ranked=AXES.map(a=>{
+        const you=Number(userScores.get(a.text)||0);
+        const them=Number(charScores.get(a.text)||0);
+        return {axis:a,you,them,shared:Math.min(you,them)};
+      })
+      .filter(r=>r.you>0&&r.them>0)
+      .sort((a,b)=>b.shared-a.shared)
+      .slice(0,4);
 
-    return ranked.length?ranked:null;
+      return ranked.length?ranked:null;
+    });
   }catch(e){
     console.warn('why failed',e);
     return null;
   }
+}
+function prefetchWhyResults(limit){
+  const q=lastQuery;
+  if(!q||!matches.length)return;
+  matches.slice(0,limit||3).forEach(m=>{
+    if(m&&m.rec)emotionalWhyForRecord(q,m.rec).catch(err=>console.warn('why prefetch failed',err));
+  });
 }
 function renderWhy(list,topName){
   const block=$('#whyBlock');
@@ -1552,16 +1590,21 @@ function selectMatch(index){
   $('#topDesc').textContent=clampText(displayDesc(top.description),520);
   $('#topTraits').innerHTML=(top.traits||[]).slice(0,6).map(t=>'<span>'+esc(t)+'</span>').join('');
   document.querySelectorAll('#cardGrid .card').forEach((el,i)=>el.classList.toggle('active',Number(el.dataset.index)===activeMatchIndex));
+
+  const cacheKey=normalizedQueryKey(lastQuery)+'::'+whyRecordKey(top);
+  const cached=whyResultCache.get(cacheKey);
   $('#whyBlock').style.display='block';
-  $('#whyList').innerHTML='<div class="why-row"><div class="why-label">measuring shared axes...</div></div>';
+  if(cached){
+    $('#whyList').innerHTML='<div class="why-row"><div class="why-label"><span>loading cached axes...</span></div></div>';
+  }else{
+    $('#whyList').innerHTML='<div class="why-row"><div class="why-label"><span>measuring shared axes...</span></div></div>';
+  }
   $('#canonLine').textContent='';
-  setStatus('reading shared emotional axes');
-  emotionalWhy(lastQuery,candidateText(top)).then(why=>{
+
+  emotionalWhyForRecord(lastQuery,top).then(why=>{
     if(activeMatchIndex===Number(index))renderWhy(why,top.name);
-    setStatus('ranked '+corpus.length+' anime characters');
   }).catch(err=>{
     console.warn('why failed',err);
-    setStatus('ranked '+corpus.length+' anime characters');
   });
 }
 
@@ -1577,6 +1620,7 @@ function renderResults(list){
   $('#cardGrid').innerHTML=matches.map((m,i)=>'<button class="card" type="button" data-index="'+i+'"><div class="card-score">'+m.score.toFixed(3)+'</div><div class="card-img"><img src="'+esc(m.rec.image)+'" alt="'+esc(m.rec.name)+'" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.closest(\'.card\')&&this.closest(\'.card\').remove()"></div><div class="card-copy"><div class="card-rank">'+String(i+1).padStart(2,'0')+' result</div><div class="card-name">'+esc(m.rec.name)+'</div><div class="card-source">'+esc(firstSeries(m.rec))+'</div></div></button>').join('');
   document.querySelectorAll('#cardGrid .card').forEach(btn=>btn.addEventListener('click',()=>selectMatch(Number(btn.dataset.index))));
   selectMatch(0);
+  prefetchWhyResults(3);
   const right=document.querySelector('.right');
   if(right)right.scrollTo({top:0,left:0,behavior:'instant'});
 }
@@ -1622,6 +1666,8 @@ async function runMatch(queryOverride, source){
   if(queryOverride!=null)queryEl.value=q;
   if(!q){setStatus('type something first — yourself, someone, a scenario, a hypothetical');queryEl.focus();return}
   lastQuery=q;
+  if(whyResultCache.size>200)whyResultCache.clear();
+  if(userAxisCache.size>40)userAxisCache.clear();
   if(!corpus.length){try{await loadCorpus(false)}catch(e){return}}
   document.body.classList.add('searching');if(source==='results'){startResultBtnCycle()}else{startBtnCycle()}$('#whyBlock').style.display='none';
   try{
