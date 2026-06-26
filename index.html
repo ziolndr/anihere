@@ -1485,7 +1485,7 @@ body.searching #resultSearchForm button{
 </main>
 <script>
 const ANILIST_URL='https://graphql.anilist.co';
-const ARBITER_BASE='https://api.arbiter.traut.ai';   /* internal — not surfaced in the UI */
+const ARBITER_BASE='https://53686c7d15e1db.lhr.life';   /* internal — not surfaced in the UI */
 const RETURN_COUNT=10;
 let CORPUS_SIZE=80;
 const PRESET_PROMPTS=[{"label": "closest", "text": "Which anime character is closest to me? I overthink everything, hide how much I care, and feel like I am always managing the mood of the room."}, {"label": "side character", "text": "I feel like the side character who keeps everyone together but never gets a real arc. I joke around, give advice, and act fine, but I am tired of being useful instead of understood. Which anime character matches that?"}, {"label": "comfort", "text": "Which anime character would be the most comforting to talk to tonight? Not the strongest or coolest one — the one who would actually make me feel less alone."}, {"label": "villain arc", "text": "Which anime character reflects my villain arc? The part of me that is tired of being patient, tired of explaining myself, and ready to become colder than people expect."}, {"label": "rival", "text": "Which anime character would be my rival? Someone who would push me, expose my weak spots, and make me level up without letting me hide behind excuses."}, {"label": "mentor", "text": "Which anime character would be the best mentor for me right now? I need someone who understands discipline, pain, pride, and the cost of becoming stronger."}, {"label": "training arc", "text": "I feel like I am entering a training arc. I am not there yet, but something in me is sharpening. Which anime character matches this stage?"}, {"label": "burnout", "text": "I am not dramatically falling apart. I am just tired, distant, and losing the spark. Which anime character understands quiet burnout?"}, {"label": "loner", "text": "I want connection, but I keep acting like I am better off alone. Which anime character has that same contradiction?"}];
@@ -1626,7 +1626,7 @@ async function loadCorpus(force){
   }
 }
 
-async function arbiterCompare(query,candidateTexts,topk){const r=await fetch(ARBITER_BASE.replace(/\/$/,'')+'/public/compare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,candidates:candidateTexts,use_freq:true,top_k:topk||candidateTexts.length})});if(!r.ok)throw new Error('compare '+r.status);return r.json()}
+async function arbiterCompare(query,candidateTexts,topk){const r=await fetch('https://53686c7d15e1db.lhr.life/v1/compare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,candidates:candidateTexts,use_freq:true,top_k:topk||candidateTexts.length})});if(!r.ok)throw new Error('compare '+r.status);return r.json()}
 function rowsOf(d){return (d&&(d.all||d.top))||[]}
 function scoreOf(x){const n=Number((x&&(x.score!=null?x.score:(x.coherence!=null?x.coherence:x.value)))||0);return isFinite(n)?n:0}
 function mapResults(data){const rows=rowsOf(data);return rows.slice(0,RETURN_COUNT).map((row,i)=>{const text=typeof row==='string'?row:(row.text||row.candidate||row.value||'');const rec=candidateToRecord.get(text);return {rec,score:scoreOf(row),rank:i+1}}).filter(x=>x.rec)}
